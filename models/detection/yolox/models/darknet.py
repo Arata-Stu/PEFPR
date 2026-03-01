@@ -13,7 +13,7 @@ class CSPDarknet(nn.Module):
         in_channels=3,         
         depth=1.0,             
         width=1.0,             
-        out_features=("dark3", "dark4", "dark5"),
+        out_features=("3", "4", "5"),
         depthwise=False,
         act="silu",
     ):
@@ -45,8 +45,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["dark2"] = base_channels * 2
-        self.strides["dark2"] = 4
+        self.stage_dims["2"] = base_channels * 2
+        self.strides["2"] = 4
 
         # dark3 (Stride: 8)
         self.dark3 = nn.Sequential(
@@ -59,8 +59,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["dark3"] = base_channels * 4
-        self.strides["dark3"] = 8
+        self.stage_dims["3"] = base_channels * 4
+        self.strides["3"] = 8
 
         # dark4 (Stride: 16)
         self.dark4 = nn.Sequential(
@@ -73,8 +73,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["dark4"] = base_channels * 8
-        self.strides["dark4"] = 16
+        self.stage_dims["4"] = base_channels * 8
+        self.strides["4"] = 16
 
         # dark5 (Stride: 32)
         self.dark5 = nn.Sequential(
@@ -89,8 +89,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["dark5"] = base_channels * 16
-        self.strides["dark5"] = 32
+        self.stage_dims["5"] = base_channels * 16
+        self.strides["5"] = 32
 
     def get_stage_dims(self, stages: tuple) -> tuple:
         """指定されたステージ（文字列）のチャネル次元数のタプルを返す"""
@@ -105,11 +105,11 @@ class CSPDarknet(nn.Module):
         x = self.stem(x)
         outputs["stem"] = x
         x = self.dark2(x)
-        outputs["dark2"] = x
+        outputs["2"] = x
         x = self.dark3(x)
-        outputs["dark3"] = x
+        outputs["3"] = x
         x = self.dark4(x)
-        outputs["dark4"] = x
+        outputs["4"] = x
         x = self.dark5(x)
-        outputs["dark5"] = x
+        outputs["5"] = x
         return {k: v for k, v in outputs.items() if k in self.out_features}
