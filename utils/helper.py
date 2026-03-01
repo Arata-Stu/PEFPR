@@ -49,3 +49,24 @@ def smart_load_state_dict(model, weights_path):
         
 
     return model
+
+def count_parameters(model, model_name="Model"):
+    """
+    モデルの総パラメータ数、学習可能パラメータ数、固定パラメータ数をカウントして表示する。
+    """
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    frozen_params = total_params - trainable_params
+
+    print("\n" + "="*50)
+    print(f"📊 {model_name} Parameter Statistics")
+    print("-"*50)
+    print(f"Total Parameters     : {total_params:,}")
+    print(f"Trainable Parameters : {trainable_params:,}")
+    print(f"Frozen Parameters    : {frozen_params:,}")
+    
+    # 概算（M: Million）の表示
+    print(f"Model Size (approx)  : {total_params / 1e6:.2f} M")
+    print("="*50 + "\n")
+    
+    return total_params, trainable_params
