@@ -31,8 +31,8 @@ class CSPDarknet(nn.Module):
 
         # stem (Stride: 2)
         self.stem = Focus(in_channels, base_channels, ksize=3, act=act)
-        self.stage_dims["stem"] = base_channels
-        self.strides["stem"] = 2
+        self.stage_dims[1] = base_channels
+        self.strides[1] = 2
 
         # dark2 (Stride: 4)
         self.dark2 = nn.Sequential(
@@ -45,8 +45,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["2"] = base_channels * 2
-        self.strides["2"] = 4
+        self.stage_dims[2] = base_channels * 2
+        self.strides[2] = 4
 
         # dark3 (Stride: 8)
         self.dark3 = nn.Sequential(
@@ -59,8 +59,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["3"] = base_channels * 4
-        self.strides["3"] = 8
+        self.stage_dims[3] = base_channels * 4
+        self.strides[3] = 8
 
         # dark4 (Stride: 16)
         self.dark4 = nn.Sequential(
@@ -73,8 +73,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["4"] = base_channels * 8
-        self.strides["4"] = 16
+        self.stage_dims[4] = base_channels * 8
+        self.strides[4] = 16
 
         # dark5 (Stride: 32)
         self.dark5 = nn.Sequential(
@@ -89,8 +89,8 @@ class CSPDarknet(nn.Module):
                 act=act,
             ),
         )
-        self.stage_dims["5"] = base_channels * 16
-        self.strides["5"] = 32
+        self.stage_dims[5] = base_channels * 16
+        self.strides[5] = 32
 
     def get_stage_dims(self, stages: tuple) -> tuple:
         """指定されたステージ（文字列）のチャネル次元数のタプルを返す"""
