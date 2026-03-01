@@ -1,0 +1,35 @@
+name: YOLOX_LSTM
+backbone:
+  name: CSPDarknet
+  in_channels: 3
+  out_features: ["dark3", "dark4", "dark5"]
+  depth: 0.33
+  width: 0.25
+  depthwise: False
+  act: "silu"
+
+fpn:
+  name: PAFPN
+  compile:
+    enable: False
+    args:
+      mode: reduce-overhead
+  depth: 0.33 
+  in_stages: [3, 4, 5]
+  depthwise: False
+  act: "silu"
+  
+head: 
+  name: YoloX
+  compile:
+    enable: False
+    args:
+      mode: reduce-overhead
+  depthwise: False
+  act: "silu"
+  num_classes: 4
+  
+
+postprocess:
+  confidence_threshold: 0.1
+  nms_threshold: 0.45
