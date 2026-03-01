@@ -1,0 +1,7 @@
+torch
+torchvision
+numpy
+
+hydra-core
+omegaconf
+tqdm
