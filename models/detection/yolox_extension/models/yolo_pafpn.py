@@ -12,7 +12,6 @@ except ImportError:
     th_compile = None
 
 from ...yolox.models.network_blocks import BaseConv, CSPLayer, DWConv
-from data.utils.types import BackboneFeatures
 
 
 class YOLOPAFPN(nn.Module):
@@ -106,7 +105,7 @@ class YOLOPAFPN(nn.Module):
                 print('Could not compile PAFPN because torch.compile is not available')
         ##################################
 
-    def forward(self, input: BackboneFeatures):
+    def forward(self, input):
         """
         Args:
             inputs: Feature maps from backbone
