@@ -2,9 +2,15 @@ name: YOLOX_LSTM
 backbone:
   name: CSPDarknet
   in_channels: 3
-  out_features: ["dark3", "dark4", "dark5"]
-  depth: 0.33
-  width: 0.25
+  out_features: [3, 4, 5]
+  # nano: 0.33, 0.25 非推奨
+  # tiny: 0.33, 0.375
+  # s: 0.33, 0.50
+  # m: 0.67, 0.75
+  # l: 1.0, 1.0
+  # x: 1.33, 1.25
+  depth: 1.0
+  width: 1.0
   depthwise: False
   act: "silu"
 
