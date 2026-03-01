@@ -13,7 +13,7 @@ class CSPDarknet(nn.Module):
         in_channels=3,         
         depth=1.0,             
         width=1.0,             
-        out_features=("3", "4", "5"),
+        out_features=(3, 4, 5),
         depthwise=False,
         act="silu",
     ):
@@ -103,13 +103,13 @@ class CSPDarknet(nn.Module):
     def forward(self, x):
         outputs = {}
         x = self.stem(x)
-        outputs["stem"] = x
+        outputs[1] = x
         x = self.dark2(x)
-        outputs["2"] = x
+        outputs[2] = x
         x = self.dark3(x)
-        outputs["3"] = x
+        outputs[3] = x
         x = self.dark4(x)
-        outputs["4"] = x
+        outputs[4] = x
         x = self.dark5(x)
-        outputs["5"] = x
+        outputs[5] = x
         return {k: v for k, v in outputs.items() if k in self.out_features}
