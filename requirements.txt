@@ -11,3 +11,6 @@ opencv-python
 seaborn
 h5py
 hdf5plugin
+
+wandb
+pycocotools
