@@ -18,7 +18,7 @@ class Trainer:
         self.args = args
         self.start_epoch = 0
         self.use_amp = getattr(self.args, 'use_amp', True)
-        self.scaler = torch.amp.GradScaler(device='cuda', enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler(device=self.device.type, enabled=self.use_amp)
         
     def _fix_gradients(self):
         """勾配の爆発やNaNを防ぐ安全策"""
