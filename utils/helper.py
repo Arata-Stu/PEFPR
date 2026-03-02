@@ -1,91 +1,114 @@
 import torch
-import wandb
+from pathlib import Path
+from typing import Dict
 
 class Checkpointer:
-    def __init__(self, output_directory = None, args=None, optimizer=None, scheduler=None, ema=None, model=None):
+    def __init__(self, output_directory, args=None, optimizer=None, scheduler=None, ema=None, model=None):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.ema = ema
         self.model = model
 
         self.mAP_max = 0
-        self.output_directory = output_directory
+        self.output_directory = Path(output_directory) 
         self.args = args
 
-    def restore_if_existing(self, folder, resume_from_best=False):
-        checkpoint = self.search_for_checkpoint(folder, best=resume_from_best)
-        if checkpoint is not None:
-            print(f"Found existing checkpoint at {checkpoint}, resuming...")
-            self.restore_checkpoint(folder, best=resume_from_best)
-
     def mAP_from_checkpoint_name(self, checkpoint_name):
-        return float(str(checkpoint_name).split("_")[-1].split(".pth")[0])
+        try:
+            return float(str(checkpoint_name).split("_")[-1].split(".pth")[0])
+        except ValueError:
+            return 0.0
 
-    def search_for_checkpoint(self, resume_checkpoint, best=False):
-        checkpoints = list(resume_checkpoint.glob("*.pth"))
+    def search_for_checkpoint(self, directory: Path, best=False):
+        """ディレクトリ内のチェックポイントを探す"""
+        if not directory.exists():
+            return None
+
+        checkpoints = list(directory.glob("*.pth"))
         if len(checkpoints) == 0:
             return None
 
-        if not best:
-            if resume_checkpoint / "last_model.pth" in checkpoints:
-                return resume_checkpoint / "last_model.pth"
+        # ベストモデルを探す場合
+        if best:
+            # mAPが含まれるファイル名のみ抽出
+            best_checkpoints = [c for c in checkpoints if "best_model_mAP" in c.name]
+            if not best_checkpoints:
+                return None
+            # mAPの値でソートして一番高いものを返す
+            best_checkpoints = sorted(best_checkpoints, key=lambda x: self.mAP_from_checkpoint_name(x.name))
+            return best_checkpoints[-1]
 
-        # remove "last_model.pth" from checkpoints
-        if resume_checkpoint / "last_model.pth" in checkpoints:
-            checkpoints.remove(resume_checkpoint / "last_model.pth")
+        # 最新のモデルを探す場合
+        last_model_path = directory / "last_model.pth"
+        if last_model_path in checkpoints:
+            return last_model_path
+        
+        return None
 
-        checkpoints = sorted(checkpoints, key=lambda x: self.mAP_from_checkpoint_name(x.name))
-        return checkpoints[-1]
+    def restore_if_existing(self, best=False):
+        """出力ディレクトリにチェックポイントがあればレジュームする"""
+        checkpoint_path = self.search_for_checkpoint(self.output_directory, best=best)
+        if checkpoint_path is not None:
+            print(f"Found existing checkpoint at {checkpoint_path}, resuming...")
+            return self.restore_checkpoint(checkpoint_path)
+        return 0 # 見つからなければエポック0からスタート
 
+    def restore_checkpoint(self, checkpoint_path):
+        """指定されたパスのチェックポイントを読み込む"""
+        checkpoint_path = Path(checkpoint_path)
+        assert checkpoint_path.exists(), f"No checkpoint found at {checkpoint_path}"
+        
+        print(f"Restoring checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
 
-    def restore_if_not_none(self, target, source):
-        if target is not None:
-            target.load_state_dict(source)
-
-    def restore_checkpoint(self, checkpoint_directory, best=False):
-        path = self.search_for_checkpoint(checkpoint_directory, best)
-        assert path is not None, "No checkpoint found in {}".format(checkpoint_directory)
-        print("Restoring checkpoint from {}".format(path))
-        checkpoint = torch.load(path)
-
-        checkpoint['model'] = self.fix_checkpoint(checkpoint['model'])
-        checkpoint['ema'] = self.fix_checkpoint(checkpoint['ema'])
-
+        # モデルの重みを復元
+        if self.model is not None and 'model' in checkpoint:
+            self.model.load_state_dict(checkpoint['model'])
+            
+        # EMAの重みを復元
         if self.ema is not None:
-            self.ema.ema.load_state_dict(checkpoint.get('ema', checkpoint['model']))
+            ema_state = checkpoint.get('ema', checkpoint.get('model'))
+            if ema_state is not None:
+                self.ema.ema.load_state_dict(ema_state)
             self.ema.updates = checkpoint.get('ema_updates', 0)
-        self.restore_if_not_none(self.model, checkpoint['model'])
-        self.restore_if_not_none(self.optimizer, checkpoint['optimizer'])
-        self.restore_if_not_none(self.scheduler, checkpoint['scheduler'])
-        return checkpoint['epoch']
-
-    def fix_checkpoint(self, state_dict):
-        return state_dict
+            
+        # OptimizerとSchedulerの復元
+        if self.optimizer is not None and 'optimizer' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+        if self.scheduler is not None and 'scheduler' in checkpoint:
+            self.scheduler.load_state_dict(checkpoint['scheduler'])
+            
+        return checkpoint.get('epoch', 0) + 1 
 
     def checkpoint(self, epoch: int, name: str=""):
         self.output_directory.mkdir(exist_ok=True, parents=True)
 
         checkpoint = {
-            "ema": self.ema.ema.state_dict(),
-            "ema_updates": self.ema.updates,
-            "model": self.model.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
             "epoch": epoch,
             "args": self.args
         }
+        
+        if self.model is not None:
+            checkpoint["model"] = self.model.state_dict()
+        if self.ema is not None:
+            checkpoint["ema"] = self.ema.ema.state_dict()
+            checkpoint["ema_updates"] = self.ema.updates
+        if self.optimizer is not None:
+            checkpoint["optimizer"] = self.optimizer.state_dict()
+        if self.scheduler is not None:
+            checkpoint["scheduler"] = self.scheduler.state_dict()
 
         torch.save(checkpoint, self.output_directory / f"{name}.pth")
 
-    def process(self, data: Dict[str, float], epoch: int):
-        mAP = data['mAP']
-        data = {f"validation/metric/{k}": v for k, v in data.items()}
-        data['epoch'] = epoch
-        wandb.log(data)
+    def process(self, metrics: Dict[str, float], epoch: int):
+        """評価指標を受け取り、WandBへの記録とベストモデルの保存を行う"""
+        mAP = metrics.get('mAP', 0.0) 
 
         if mAP > self.mAP_max:
-            self.checkpoint(epoch, name=f"best_model_mAP_{mAP}")
+            print(f"🌟 New Best mAP: {mAP:.4f} (Previous: {self.mAP_max:.4f}). Saving model...")
+            self.checkpoint(epoch, name=f"best_model_mAP_{mAP:.4f}")
             self.mAP_max = mAP
+
 
 def smart_load_state_dict(model, weights_path):
     """
