@@ -1,0 +1,55 @@
+name: YOLOX_PEPR_Extension
+
+backbone:
+  name: CSPDarknet
+  in_channels: 3
+  out_features: [3, 4, 5]
+  depth: 1.0
+  width: 1.0
+  depthwise: False
+  act: "silu"
+
+fpn:
+  name: PAFPN
+  compile:
+    enable: False
+    args:
+      mode: reduce-overhead
+  depth: ${backbone.depth}
+  in_stages: [3, 4, 5]
+  depthwise: False
+  act: "silu"
+  
+head: 
+  name: YoloX
+  compile:
+    enable: False
+    args:
+      mode: reduce-overhead
+  depthwise: False
+  act: "silu"
+  num_classes: 4
+
+postprocess:
+  confidence_threshold: 0.1
+  nms_threshold: 0.45
+
+
+# ====================================================
+# イベント予測
+# ====================================================
+event_backbone:
+  name: CSPDarknet
+  in_channels: 1  # Time Surface表現などを想定し1チャネル
+  out_features: [3, 4, 5]
+  depth: ${backbone.depth} # 生徒モデルと深さを同期
+  width: ${backbone.width} # 生徒モデルと幅(チャネル数)を同期
+  depthwise: False
+  act: "silu"
+
+event_predictor:
+  name: PEPRTransformerPredictor
+  in_channels: -1  
+  num_patches: 4
+  num_layers: 4
+  num_heads: 8

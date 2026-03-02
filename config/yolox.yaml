@@ -1,4 +1,4 @@
-name: YOLOX_LSTM
+name: YOLOX
 backbone:
   name: CSPDarknet
   in_channels: 3
