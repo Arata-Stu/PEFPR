@@ -20,7 +20,7 @@ fpn:
     enable: False
     args:
       mode: reduce-overhead
-  depth: ${backbone.depth}
+  depth: ${model.backbone.depth}
   in_stages: [3, 4, 5]
   depthwise: False
   act: "silu"
