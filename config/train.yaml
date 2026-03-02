@@ -1,0 +1,26 @@
+defaults:
+  - dataset: dsec_det
+  - model: yolox
+  - _self_
+  
+hydra:
+  run:
+    dir: ./outputs/train/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+training:
+  ckpt_dir: ./checkpoints/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  batch_size: 4
+  num_workers: 4
+  lr: 0.001
+  weight_decay: 0.0001
+  warmup_epochs: 3
+  tot_num_epochs: 50
+  eval_interval: 1
+  ema_decay: 0.9999
+  use_amp: true
+  clip: 1.0
+
+wandb:
+  project: ???
+  name: ???
+  output_dir: ./outputs/wandb/train/${now:%Y-%m-%d}/${now:%H-%M-%S}
