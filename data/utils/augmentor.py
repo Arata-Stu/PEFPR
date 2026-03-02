@@ -262,15 +262,15 @@ def init_transforms(transforms, height, width):
             t.init(height=height, width=width)
 
 class Augmentations:
-    def __init__(self, args):
+    def __init__(self, config):
         self.transform_training = Compose([
-            RandomHFlip(p=args.aug_p_flip),
-            RandomCrop([0.75, 0.75], p=0.2),
-            RandomZoom(zoom=[1, args.aug_zoom], subsample=True),
-            RandomTranslate([args.aug_trans, args.aug_trans]),
-            Crop([0, 0], [1, 1]),
+            RandomHFlip(p=config.aug_p_flip),
+            RandomCrop(size=config.random_crop_size, p=config.random_crop_p),
+            RandomZoom(zoom=[1.0, config.aug_zoom], subsample=True),
+            RandomTranslate([config.aug_trans, config.aug_trans]),
+            Crop([0.0, 0.0], [1.0, 1.0]),
         ])
         
         self.transform_testing = Compose([
-            Crop([0, 0], [1, 1]),
+            Crop([0.0, 0.0], [1.0, 1.0]),
         ])
