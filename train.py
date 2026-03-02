@@ -3,15 +3,17 @@ import random
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from pathlib import Path
 import wandb
-
+import hdf5plugin
 import hydra
 from omegaconf import OmegaConf, DictConfig
 
-from models.detection.yolox_extension.models.detector import YoloXPEPRDetector 
+from models.detection.yolox_extension.models.detector import YoloXDetector 
 from models.detection.utils.ema import ModelEMA
 from data.dsec.dsec_det_dataset import DSECDataset
 from data.utils.augmentor import Augmentations
+from data.utils.collate import custom_collate_fn
 from utils.scheduler import LRSchedule
 from utils.helper import Checkpointer
 from utils.trainer import Trainer  
@@ -48,16 +50,22 @@ def main(config: DictConfig):
     augmentations = Augmentations(config=config.dataset.transforms)
     
     train_dataset = DSECDataset(
-        root=config.dataset.dataset_root, 
-        sequences=config.dataset.split.train, 
+        root=Path(config.dataset.dataset_root), 
+        split="train", 
         sync=config.dataset.sync,
-        transform=augmentations.transform_training
+        transforms=augmentations.transform_training,
+        split_config=config.dataset.split,
+        use_image=config.dataset.use_image,
+        use_events=config.dataset.use_events,
     )
     val_dataset = DSECDataset(
-        root=config.dataset.dataset_root, 
-        sequences=config.dataset.split.val, 
+        root=Path(config.dataset.dataset_root), 
+        split="val", 
         sync=config.dataset.sync,
-        transform=augmentations.transform_testing
+        transforms=augmentations.transform_testing,
+        split_config=config.dataset.split,
+        use_image=config.dataset.use_image,
+        use_events=config.dataset.use_events,
     )
 
     train_loader = DataLoader(
@@ -66,6 +74,7 @@ def main(config: DictConfig):
         shuffle=True, 
         num_workers=config.training.num_workers, 
         drop_last=True,
+        collate_fn=custom_collate_fn,
         pin_memory=True
     )
     val_loader = DataLoader(
@@ -74,6 +83,7 @@ def main(config: DictConfig):
         shuffle=False, 
         num_workers=config.training.num_workers, 
         drop_last=False,
+        collate_fn=custom_collate_fn,
         pin_memory=True
     )
 
@@ -87,7 +97,7 @@ def main(config: DictConfig):
     print(f"=== 🚀 Using Device: {device} ===")
 
     print("=== 🚀 Initializing Model ===")
-    model = YoloXPEPRDetector(config.model).to(device)
+    model = YoloXDetector(config.model).to(device)
     ema = ModelEMA(model, decay=config.training.get("ema_decay", 0.9999))
 
     # パラメータ数の計算と表示
