@@ -17,6 +17,7 @@ class DSECDataset(DSECDet):
         if self.transforms is not None:
             init_transforms(self.transforms, self.height, self.width)
 
+        self.dataset_name = "DSEC-Det"
         self.time_window = 1000000
     
     def preprocess_events(self, events):
