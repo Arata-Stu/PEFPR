@@ -1,11 +1,13 @@
 import torch
 
+import torch
+
 def smart_load_state_dict(model, weights_path):
     """
     YOLOXの学習済み重みを、自作のDetectorモデルに柔軟にロードする。
+    Focus層の任意のチャンネル数（1, 3, 20など）の変更に完全対応。
     """
     checkpoint = torch.load(weights_path, map_location="cpu")
-    # "model" キーがある場合は中身を取り出し、なければ全体を state_dict とする
     src_dict = checkpoint.get("model", checkpoint)
     target_dict = model.state_dict()
     
@@ -15,39 +17,83 @@ def smart_load_state_dict(model, weights_path):
     for k, v in src_dict.items():
         clean_k = k
         
-        # 1. Backboneの接頭辞正規化 (backbone.backbone -> backbone / dark -> backbone.dark)
+        # 1. Main Backboneの接頭辞正規化
         if clean_k.startswith("backbone.backbone."):
             clean_k = clean_k.replace("backbone.backbone.", "backbone.", 1)
         elif any(clean_k.startswith(p) for p in ["dark", "stem"]):
             clean_k = "backbone." + clean_k
             
-        # 2. Headの接頭辞正規化 (head -> yolox_head)
+        # 2. Headの接頭辞正規化
         if clean_k.startswith("head."):
             clean_k = clean_k.replace("head.", "yolox_head.", 1)
 
-        # 3. マッチング確認
+        # 3. Main Model (RGB) へのロード
         if clean_k in target_dict:
             if v.shape == target_dict[clean_k].shape:
                 new_dict[clean_k] = v
             else:
                 shape_mismatch.append(clean_k)
 
-    # ロード実行 (strict=False にすることで、追加したLSTM層などは初期値のまま維持される)
+        # 4. Event Backboneへの柔軟なコピー
+        if clean_k.startswith("backbone."):
+            event_k = clean_k.replace("backbone.", "event_backbone.", 1)
+            
+            if event_k in target_dict:
+                target_shape = target_dict[event_k].shape
+                
+                # そのまま形が合う場合 (中間層など)
+                if v.shape == target_shape:
+                    new_dict[event_k] = v
+                else:
+                    # 【チャンネル数の不一致を吸収する高度なロジック】
+                    if len(v.shape) == 4 and len(target_shape) == 4:
+                        
+                        # パターンA: YOLOXのFocus層 (事前学習が12チャネルで、ターゲットが4の倍数の場合)
+                        if v.shape[1] == 12 and target_shape[1] % 4 == 0:
+                            c_new = target_shape[1] // 4  # 新しい入力チャンネル数 (例: 1, 20など)
+                            
+                            # (Out, 12, K, K) -> (Out, 4パッチ, 3チャネル, K, K) に変形
+                            v_reshaped = v.view(v.shape[0], 4, 3, v.shape[2], v.shape[3])
+                            
+                            # 3チャンネルの重みを合計する
+                            v_sum = v_reshaped.sum(dim=2, keepdim=True)
+                            
+                            # 新しいチャンネル数に合わせて複製し、スケールを調整
+                            v_adapted = v_sum.repeat(1, 1, c_new, 1, 1) / c_new
+                            
+                            # 再びFocus層のフラットな形状 (Out, 4 * c_new, K, K) に戻す
+                            adapted_v = v_adapted.view(v.shape[0], target_shape[1], v.shape[2], v.shape[3])
+                            
+                            if adapted_v.shape == target_shape:
+                                new_dict[event_k] = adapted_v
+                                continue
+                                
+                        # パターンB: 通常のConv層の最初の層 (RGB 3チャネル -> 任意のCチャネル)
+                        elif v.shape[1] == 3:
+                            c_new = target_shape[1]
+                            v_sum = v.sum(dim=1, keepdim=True)
+                            adapted_v = v_sum.repeat(1, c_new, 1, 1) / c_new
+                            
+                            if adapted_v.shape == target_shape:
+                                new_dict[event_k] = adapted_v
+                                continue
+
+                    # どうしても形が合わない場合はミスマッチとして記録
+                    shape_mismatch.append(event_k)
+
+    # ロード実行
     missing, unexpected = model.load_state_dict(new_dict, strict=False)
     
-    # ロード結果のサマリを表示
-    print("\n" + "="*40)
-    print(f"✅ ロード成功: {len(new_dict)} 個")
-    
-    # CNN/Headに関連する未ロード（名前不一致の可能性）を特定
-    essential_missing = [m for m in missing if any(x in m for x in ["dark", "stem", "yolox_head"])]
-    if essential_missing:
-        print(f"⚠️ 予期せぬ未ロード (CNN系): {len(essential_missing)} 個")
+    # ログ出力 (省略せずに見やすく)
+    print("\n" + "="*50)
+    print(f"✅ ロード成功: {len(new_dict)} 個のテンソル")
     
     if shape_mismatch:
         print(f"❌ サイズ不一致 (Shape Mismatch): {len(shape_mismatch)} 個")
+        for sm in shape_mismatch:
+            print(f"   - {sm}")
+    print("="*50 + "\n")
         
-
     return model
 
 def count_parameters(model, model_name="Model"):
