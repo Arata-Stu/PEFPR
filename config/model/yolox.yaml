@@ -33,7 +33,7 @@ head:
       mode: reduce-overhead
   depthwise: False
   act: "silu"
-  num_classes: 4
+  num_classes: 3
   
 
 postprocess:

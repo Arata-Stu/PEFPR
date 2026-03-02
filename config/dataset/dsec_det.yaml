@@ -1,6 +1,7 @@
 dataset_root: /path/to/dsec_dataset  
 sync: back # back or front
-
+use_image: true
+use_events: true
 transforms:
   aug_p_flip: 0.5          
   aug_zoom: 1.2            
