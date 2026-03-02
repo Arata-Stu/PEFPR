@@ -7,7 +7,7 @@ from models.detection.yolox_extension.models.detector import YoloXDetector, Yolo
 from utils.helper import smart_load_state_dict, count_parameters
 
 # 1. --- モデルの準備 ---
-yaml_path = "../config/yolox.yaml"
+yaml_path = "../config/model/yolox.yaml"
 model_config = OmegaConf.load(yaml_path)
 model = YoloXDetector(model_config)
 
@@ -51,7 +51,7 @@ print("\nすべての処理が完了しました。")
 # PERP
 
 # 1. --- モデルの準備 ---
-yaml_path = "../config/PEPR-yolox.yaml"
+yaml_path = "../config/model/PEPR-yolox.yaml"
 model_config = OmegaConf.load(yaml_path)
 model = YoloXPEPRDetector(model_config)
 
