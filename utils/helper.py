@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from pathlib import Path
 from typing import Dict
 
@@ -224,3 +225,17 @@ def count_parameters(model, model_name="Model"):
     print("="*50 + "\n")
     
     return total_params, trainable_params
+
+def compute_class_mapping(target_classes, original_classes, mapping):
+    """
+    元のクラス名リストから、対象とする新しいクラスIDへのマッピング配列を生成する汎用関数。
+    マッピング先が存在しない（Noneなど）場合は -1 を割り当てる。
+    """
+    output_mapping = []
+    for c in original_classes:
+        mapped_class = mapping.get(c, None)
+        if mapped_class in target_classes:
+            output_mapping.append(target_classes.index(mapped_class))
+        else:
+            output_mapping.append(-1)
+    return np.array(output_mapping)
