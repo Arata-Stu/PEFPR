@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Tuple, Union
 
 import torch as th
+import torch.nn.functional as F
 from omegaconf import DictConfig
 
 try:
@@ -103,11 +104,9 @@ class YoloXPEPRDetector(th.nn.Module):
                 targets: Optional[th.Tensor] = None,
                 retrieve_detections: bool = True):
         
-        # 1. RGBの順伝播
         backbone_features = self.forward_backbone(x)
         outputs, losses = None, {}
 
-        # 2. 学習時のみ：タスクロスとイベント予測ロスの計算
         if self.training:
             assert targets is not None
             assert event_data is not None, "Training YoloXPEPRDetector requires 'event_data'."
@@ -117,24 +116,78 @@ class YoloXPEPRDetector(th.nn.Module):
             losses.update(task_losses)
 
             # PEPR: イベント特徴の予測ロス
+            target_stage = 5 
+
             with th.no_grad():
-                event_features = self.event_backbone(event_data)
+                event_features_dict = self.event_backbone(event_data)
+                event_feat_map = event_features_dict[target_stage] # (B, C, H, W)
             
-            event_pred = self.event_predictor(backbone_features)
-            losses["loss_pepr_event"] = self.compute_pepr_loss(event_pred, event_features)
+            # 1. アクティビティに基づいて M=4 個のパッチインデックスをサンプリング
+            patch_indices = self.sample_patch_indices(event_feat_map, num_patches=4)
+            
+            # 2. RGB特徴量マップとターゲット位置を予測器に渡す
+            rgb_feat_map = backbone_features[target_stage]
+            event_pred = self.event_predictor(rgb_feat_map, patch_indices)
+            
+            # 3. 予測パッチと実際のイベントパッチ間のMSEロスを計算
+            losses["loss_pepr_event"] = self.compute_pepr_loss(
+                predicted_patches=event_pred, 
+                target_features=event_feat_map, 
+                patch_indices=patch_indices
+            )
 
             return outputs, losses
 
-        # 3. 推論時
         if not retrieve_detections:
             return None, None
             
         outputs, _ = self.forward_detect(backbone_features)
         return outputs, None
 
-    def compute_pepr_loss(self, predicted_patches, target_features):
+    def sample_patch_indices(self, event_feat_map: th.Tensor, num_patches: int = 4) -> th.Tensor:
         """
-        ここにパッチの抽出と平均二乗誤差(MSE)の計算を実装します。
+        イベント特徴マップのアクティビティに基づいてパッチ(位置)を選択します。
+        戻り値: (B, num_patches) の平坦化された空間インデックス
         """
-        # TODO: 実装
-        pass
+        B, C, H, W = event_feat_map.shape
+        
+        # チャンネル方向のL2ノルムを計算し、空間的な「アクティビティ」とする: (B, H, W)
+        activity = event_feat_map.norm(dim=1)
+        
+        # 空間次元を平坦化: (B, H*W)
+        activity_flat = activity.view(B, -1)
+        
+        # 各バッチに対して、アクティビティ上位と下位を半分ずつサンプリング
+        half_k = num_patches // 2
+        indices = []
+        for b in range(B):
+            # イベントが活発な領域 (動くエッジなど)
+            topk_idx = th.topk(activity_flat[b], k=half_k).indices
+            # イベントが静かな領域 (背景など)
+            bottomk_idx = th.topk(activity_flat[b], k=num_patches - half_k, largest=False).indices
+            
+            # 結合して保存
+            indices.append(th.cat([topk_idx, bottomk_idx]))
+            
+        return th.stack(indices) # Shape: (B, num_patches)
+
+    def compute_pepr_loss(self, predicted_patches, target_features, patch_indices):
+        """
+        predicted_patches: (B, M, C) 予測器からの出力
+        target_features: (B, C, H, W) イベントエンコーダからの正解特徴量マップ
+        patch_indices: (B, M) サンプリングされた平坦化インデックス
+        """
+        B, C, H, W = target_features.shape
+        
+        # 1. 正解特徴量を平坦化: (B, C, H, W) -> (B, H*W, C)
+        flat_targets = target_features.flatten(2).transpose(1, 2)
+        
+        # 2. サンプリングされたインデックスを使って、正解パッチ特徴を抽出
+        # patch_indices を (B, M, C) の形に拡張して gather で一気に取り出す
+        expanded_indices = patch_indices.unsqueeze(-1).expand(-1, -1, C)
+        actual_patches = th.gather(flat_targets, dim=1, index=expanded_indices) # (B, M, C)
+        
+        # 3. 論文数式(2)の MSE Loss (平均二乗誤差) を計算
+        loss = F.mse_loss(predicted_patches, actual_patches)
+        
+        return loss

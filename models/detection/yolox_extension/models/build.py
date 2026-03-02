@@ -5,7 +5,7 @@ from omegaconf import OmegaConf, DictConfig
 from .yolo_pafpn import YOLOPAFPN
 from ...yolox.models.yolo_head import YOLOXHead
 from ...yolox.models.darknet import CSPDarknet
-from .decoder import PEPRTransformerDecoder
+from .decoder import PEPRTransformerPredictor
 
 
 def build_yolox_head(head_cfg: DictConfig, in_channels: Tuple[int, ...], strides: Tuple[int, ...]):
@@ -40,5 +40,5 @@ def build_pepr_predictor(predictor_cfg: DictConfig):
     predictor_cfg_dict = OmegaConf.to_container(predictor_cfg, resolve=True, throw_on_missing=True)
     predictor_name = predictor_cfg_dict.pop('name')
     if predictor_name in {'PEPRTransformerPredictor'}:
-        return PEPRTransformerDecoder(**predictor_cfg_dict)
+        return PEPRTransformerPredictor(**predictor_cfg_dict)
     raise NotImplementedError

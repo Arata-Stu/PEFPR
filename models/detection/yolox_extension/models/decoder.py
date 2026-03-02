@@ -1,56 +1,38 @@
 import torch
 import torch.nn as nn
 
-class PEPRTransformerDecoder(nn.Module):
-    def __init__(self, 
-                 in_channels: int, 
-                 num_patches: int = 4, 
-                 num_layers: int = 4,   
-                 num_heads: int = 8): 
+class PEPRTransformerPredictor(nn.Module):
+    def __init__(self, in_channels: int, num_layers: int = 4, num_heads: int = 8, max_spatial_size: int = 1600):
         super().__init__()
+        # (B, H*W, C) を処理できるTransformerデコーダ
+        decoder_layer = nn.TransformerDecoderLayer(d_model=in_channels, nhead=num_heads, batch_first=True)
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         
-        self.num_patches = num_patches
-        self.in_channels = in_channels
-        
-        # 1. Transformerデコーダ層の定義 
-        # batch_first=True にすることで (Batch, Sequence, Features) の形を扱えるようにします
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=in_channels, 
-            nhead=num_heads, 
-            batch_first=True
-        )
-        self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, 
-            num_layers=num_layers
-        )
-        
-        # 2. クエリ用の学習可能な位置埋め込み（Positional Embeddings） 
-        # M個のパッチそれぞれに対応するクエリを用意します
-        self.query_embed = nn.Embedding(num_patches, in_channels)
+        # 空間全体の学習可能な位置埋め込み (Positional Embeddings)
+        # max_spatial_size は H*W の最大値 (例: dark5 が 40x40 なら 1600)
+        self.pos_embed = nn.Parameter(torch.randn(1, max_spatial_size, in_channels))
 
-    def forward(self, rgb_features: torch.Tensor):
+    def forward(self, rgb_features: torch.Tensor, patch_indices: torch.Tensor):
         """
-        引数:
-            rgb_features: YOLOXバックボーンから出力された特徴量マップ dict[key, value] 形式で、valueのshapeは (B, C, H, W)
-        戻り値:
-            predicted_patches: 予測されたM個のイベント特徴。Shape: (B, M, C)
+        rgb_features: (B, C, H, W) RGBのバックボーン特徴量 (dark5)
+        patch_indices: (B, M) 予測すべき空間位置のインデックス
         """
-        # ステージ5の特徴量を利用
-        rgb_feature = rgb_features[5]  # 例: (B, C, H, W)
-        B, C, H, W = rgb_feature.shape
+        B, C, H, W = rgb_features.shape
+        M = patch_indices.shape[1]
         
-        # 1. RGB特徴量を平坦化 (Flatten) して系列データにする 
-        # (B, C, H, W) -> (B, C, H*W) -> (B, H*W, C)
-        memory = rgb_feature.flatten(2).transpose(1, 2)
+        # 1. RGB特徴量を系列に変換し、位置情報を付与 (Memory)
+        memory = rgb_features.flatten(2).transpose(1, 2) # (B, H*W, C)
+        memory = memory + self.pos_embed[:, :H*W, :]     # 位置埋め込みを加算
         
-        # 2. Transformerに入力するクエリの準備 
-        # Embeddingの重みを全バッチで共有して展開します
-        # Shape: (B, num_patches, C)
-        queries = self.query_embed.weight.unsqueeze(0).repeat(B, 1, 1)
+        # 2. 予測したいターゲット位置の位置埋め込みを Query として抽出
+        # patch_indices (B, M) を (B, M, C) に拡張
+        expanded_indices = patch_indices.unsqueeze(-1).expand(-1, -1, C)
+        pos_embed_batch = self.pos_embed[:, :H*W, :].expand(B, -1, -1)
         
-        # 3. Transformerデコーダによる予測計算 
-        # tgt (ターゲット/クエリ): 位置埋め込み
-        # memory (コンテキスト): 平坦化されたRGB特徴量
-        predicted_patches = self.transformer_decoder(tgt=queries, memory=memory)
+        # 指定された場所の Positional Embedding だけを抽出 -> これが「ここを予測して」という質問(Query)になる
+        queries = torch.gather(pos_embed_batch, dim=1, index=expanded_indices) # (B, M, C)
+        
+        # 3. デコーダで予測
+        predicted_patches = self.transformer_decoder(tgt=queries, memory=memory) # (B, M, C)
         
         return predicted_patches

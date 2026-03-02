@@ -50,6 +50,5 @@ event_backbone:
 event_predictor:
   name: PEPRTransformerPredictor
   in_channels: -1  
-  num_patches: 4
   num_layers: 4
   num_heads: 8
