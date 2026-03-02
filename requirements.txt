@@ -1,7 +1,13 @@
 torch
 torchvision
 numpy
+numba
 
 hydra-core
 omegaconf
 tqdm
+
+opencv-python
+seaborn
+h5py
+hdf5plugin
