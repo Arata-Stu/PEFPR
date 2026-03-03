@@ -15,7 +15,7 @@ fpn:
     enable: False
     args:
       mode: reduce-overhead
-  depth: ${backbone.depth}
+  depth: ${model.backbone.depth}
   in_stages: [3, 4, 5]
   depthwise: False
   act: "silu"
@@ -42,8 +42,8 @@ event_backbone:
   name: CSPDarknet
   in_channels: 1  # Time Surface表現などを想定し1チャネル
   out_features: [3, 4, 5]
-  depth: ${backbone.depth} # 生徒モデルと深さを同期
-  width: ${backbone.width} # 生徒モデルと幅(チャネル数)を同期
+  depth: ${model.backbone.depth} # 生徒モデルと深さを同期
+  width: ${model.backbone.width} # 生徒モデルと幅(チャネル数)を同期
   depthwise: False
   act: "silu"
 
