@@ -1,4 +1,4 @@
-name: YOLOX_PEPR_Extension
+name: PERP-YOLOX
 
 backbone:
   name: CSPDarknet
