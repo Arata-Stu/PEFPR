@@ -64,17 +64,22 @@ class Trainer:
 
         # --- 2. 正解データ(GT)の整形 ---
         if targets is not None:
-            # targets: (B, Max_Obj, 5) -> [class_id, x, y, w, h]
+            # targets: (B, Max_Obj, 5) -> [class_id, cx, cy, w, h]
             for i in range(targets.size(0)):
                 target = targets[i]
                 mask = (target[:, 3] > 0) & (target[:, 4] > 0) # w,h > 0
                 valid_t = target[mask]
                 
-                # [x, y, w, h] -> [x1, y1, x2, y2] に変換
+                # 🌟 [cx, cy, w, h] -> [x1, y1, x2, y2] に正しく変換する
                 boxes = valid_t[:, 1:5].clone()
-                boxes[:, 2:] += boxes[:, :2]
+                boxes_xyxy = torch.zeros_like(boxes)
                 
-                formatted_targets.append(self._to_buffer_dict(boxes, valid_t[:, 0]))
+                boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2.0  # x1 = cx - w/2
+                boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2.0  # y1 = cy - h/2
+                boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2.0  # x2 = cx + w/2
+                boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2.0  # y2 = cy + h/2
+                
+                formatted_targets.append(self._to_buffer_dict(boxes_xyxy, valid_t[:, 0]))
 
         return formatted_outputs, formatted_targets
 
