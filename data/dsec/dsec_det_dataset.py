@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
  
-from utils.helper import compute_class_mapping
+from utils.helper import compute_class_mapping, format_targets_for_yolox
 from .dsec_det.dataset import DSECDet, render_events_on_image, render_object_detections_on_image
 from ..utils.augmentor import init_transforms
 from ..utils.representation import EventHistogram, VoxelGrid
@@ -125,6 +125,8 @@ class DSECDataset(DSECDet):
         # 5. 🌟 データ拡張が終わった後に、イベント表現(Histogram等)に変換する
         if self.use_events and 'events' in output:
             output['events'] = self.generate_event_representation(output['events'])
+
+        output['targets'] = format_targets_for_yolox(output.get('tracks'))
 
         # 6. デバッグ表示
         if self.debug_augmented:

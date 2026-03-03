@@ -20,20 +20,8 @@ def custom_collate_fn(batch):
                     img = img.permute(2, 0, 1)
             images.append(img)
         
-        # 2. Tracks (BBox) の処理
-        tracks = item.get('tracks', None)
-        if tracks is not None and len(tracks) > 0:
-            cls_id = tracks['class_id'].astype(np.float32)
-            x = tracks['x'].astype(np.float32)
-            y = tracks['y'].astype(np.float32)
-            w = tracks['w'].astype(np.float32)
-            h = tracks['h'].astype(np.float32)
-            
-            target_tensor = torch.tensor(np.column_stack([cls_id, x, y, w, h]), dtype=torch.float32)
-        else:
-            target_tensor = torch.zeros((0, 5), dtype=torch.float32)
-            
-        targets_list.append(target_tensor)
+        # 2. Targets の処理
+        targets_list.append(item.get('targets', torch.zeros((0, 5), dtype=torch.float32)))
 
         # 3. Events の処理
         events_list.append(item.get('events', None))
@@ -57,6 +45,7 @@ def custom_collate_fn(batch):
 
     out['targets'] = padded_targets
     
+    # イベントデータのバッチ化
     if len(events_list) > 0 and events_list[0] is not None:
         if isinstance(events_list[0], torch.Tensor):
             # HistogramやVoxelGridなど、Tensor化されている場合は4Dテンソル (B, C, H, W) にスタック

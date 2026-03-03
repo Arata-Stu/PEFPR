@@ -239,3 +239,25 @@ def compute_class_mapping(target_classes, original_classes, mapping):
         else:
             output_mapping.append(-1)
     return np.array(output_mapping)
+
+def format_targets_for_yolox(tracks):
+    """
+    DSECのトラックデータ(構造化配列)をYOLOXの学習フォーマットに変換する。
+    [x_topleft, y_topleft, w, h] -> [class_id, cx, cy, w, h]
+    """
+    if tracks is None or len(tracks) == 0:
+        return torch.zeros((0, 5), dtype=torch.float32)
+
+    cls_id = tracks['class_id'].astype(np.float32)
+    x_topleft = tracks['x'].astype(np.float32)
+    y_topleft = tracks['y'].astype(np.float32)
+    w = tracks['w'].astype(np.float32)
+    h = tracks['h'].astype(np.float32)
+
+    # 中心座標 (cx, cy) に変換
+    cx = x_topleft + w / 2.0
+    cy = y_topleft + h / 2.0
+
+    # (N, 5) のテンソルとして結合
+    target_tensor = torch.tensor(np.column_stack([cls_id, cx, cy, w, h]), dtype=torch.float32)
+    return target_tensor
