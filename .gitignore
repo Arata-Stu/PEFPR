@@ -1,4 +1,5 @@
 weights/
+checkpoints/
 wandb/
 outputs
 # Byte-compiled / optimized / DLL files
