@@ -1,0 +1,14 @@
+defaults:
+  - dataset: dsec_det
+  - model: yolox
+  - _self_
+  
+hydra:
+  run:
+    dir: ./outputs/eval/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+eval:
+  batch_size: 4
+  num_workers: 4
+    
+ckpt_path: /path/to/.pth
