@@ -2,6 +2,10 @@ dataset_root: /path/to/dsec_dataset
 sync: back # back or front
 use_image: true
 use_events: true
+event_repr: 
+  name: histogram # histogram or voxel_grid or raw
+  num_bins: 5 # voxel_gridの場合
+
 transforms:
   aug_p_flip: 0.5          
   aug_zoom: 1.2            
