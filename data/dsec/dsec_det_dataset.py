@@ -1,10 +1,10 @@
 import numpy as np
 import cv2
-
-from utils.dsec_utils import filter_tracks, map_classes, filter_small_bboxes 
+ 
 from utils.helper import compute_class_mapping
 from .dsec_det.dataset import DSECDet, render_events_on_image, render_object_detections_on_image
 from ..utils.augmentor import init_transforms
+from .dsec_utils import filter_tracks, map_classes, filter_small_bboxes
 
 class DSECDataset(DSECDet):
     def __init__(self, root, split="train", sync="front", debug=False, split_config=None, transforms=None, 
@@ -51,7 +51,7 @@ class DSECDataset(DSECDet):
         # フィルタリング済みのペア数の合計を返す
         return sum(len(pairs) for pairs in self.image_index_pairs.values())
 
-    def rel_index(self, idx):
+    def _resolve_global_index(self, idx):
         """グローバルなidxを、ディレクトリ名とローカルなインデックスに変換する (DAGR由来)"""
         for folder in self.subsequence_directories:
             name = folder.name
@@ -78,7 +78,7 @@ class DSECDataset(DSECDet):
 
     def __getitem__(self, idx):
         # 1. インデックスの解決
-        directory, image_index_pairs, track_mask, rel_idx = self.rel_index(idx)
+        directory, image_index_pairs, track_mask, rel_idx = self._resolve_global_index(idx)
         
         idx0, idx1 = image_index_pairs[rel_idx]
         dir_name = directory.root.name
