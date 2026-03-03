@@ -17,6 +17,7 @@ from data.utils.collate import custom_collate_fn
 from utils.scheduler import LRSchedule
 from utils.helper import Checkpointer
 from utils.trainer import Trainer  
+from utils.helper import smart_load_state_dict, count_parameters
 
 def seed_everything(seed: int):
     """再現性を確保するためのシード固定"""
@@ -98,11 +99,9 @@ def main(config: DictConfig):
 
     print("=== 🚀 Initializing Model ===")
     model = YoloXDetector(config.model).to(device)
+    model = smart_load_state_dict(model, config.training.pretrained_path)
+    count_parameters(model, model_name="YoloXDetector")
     ema = ModelEMA(model, decay=config.training.get("ema_decay", 0.9999))
-
-    # パラメータ数の計算と表示
-    num_params = sum([np.prod(p.size()) for p in model.parameters()])
-    print(f"Training with {num_params:,} parameters.")
 
     print("=== 🚀 Initializing Optimizer & Scheduler ===")
     nominal_batch_size = 64

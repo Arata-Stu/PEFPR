@@ -8,6 +8,7 @@ hydra:
     dir: ./outputs/train/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
 training:
+  pretrained_path: ./weights/.pth
   ckpt_dir: ./checkpoints/${now:%Y-%m-%d}/${now:%H-%M-%S}
   batch_size: 4
   num_workers: 4
