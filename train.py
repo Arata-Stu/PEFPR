@@ -143,7 +143,7 @@ def main(config: DictConfig):
         scheduler=lr_scheduler,
         ema=ema,
         device=device,
-        args=config.training 
+        config=config 
     )
 
     # 学習・評価ループの開始

@@ -1,23 +1,29 @@
 import torch
+import torchvision
 import tqdm
 import wandb
+import numpy as np
 
 from utils.buffers import DetectionBuffer
+from models.detection.yolox.utils.boxes import postprocess
 
 class Trainer:
     def __init__(self, model, optimizer, train_loader, val_loader, checkpointer, 
-                 scheduler=None, ema=None, device='cuda', args=None):
-        self.model = model.to(device)
+                 scheduler=None, ema=None, device='cuda', config=None):
+        
+        self.device = torch.device(device) if isinstance(device, str) else device
+        self.model = model.to(self.device)
         self.optimizer = optimizer
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.checkpointer = checkpointer 
         self.scheduler = scheduler
         self.ema = ema
-        self.device = device
-        self.args = args
+        self.config = config
         self.start_epoch = 0
-        self.use_amp = getattr(self.args, 'use_amp', True)
+        
+        # AMP設定
+        self.use_amp = getattr(self.config.training, 'use_amp', True)
         self.scaler = torch.amp.GradScaler(device=self.device.type, enabled=self.use_amp)
         
     def _fix_gradients(self):
@@ -25,6 +31,61 @@ class Trainer:
         for param in self.model.parameters():
             if param.grad is not None:
                 param.grad = torch.nan_to_num(param.grad, nan=0.0)
+
+    def _format_targets_for_eval(self, targets):
+        """バッチ化された正解テンソルをDetectionBufferが期待する辞書のリストに変換する"""
+        formatted = []
+        if targets is None:
+            return formatted
+            
+        # targets shape: (Batch, Max_Objects, 5) => [class_id, x, y, w, h]
+        for i in range(targets.size(0)):
+            target = targets[i]
+            
+            # パディング(ゼロ埋め)を除外：幅(w)と高さ(h)が0より大きいものを有効とする
+            valid_mask = (target[:, 3] > 0) & (target[:, 4] > 0)
+            valid_target = target[valid_mask]
+            
+            labels = valid_target[:, 0].long()
+            
+            # [x, y, w, h] を [x1, y1, x2, y2] に変換して評価バッファに渡す
+            boxes = valid_target[:, 1:5].clone()
+            boxes[:, 2] = boxes[:, 0] + boxes[:, 2]  # x2 = x + w
+            boxes[:, 3] = boxes[:, 1] + boxes[:, 3]  # y2 = y + h
+            
+            formatted.append({
+                "boxes": boxes,
+                "labels": labels
+            })
+        return formatted
+    
+    def _format_outputs_for_eval(self, outputs):
+        """YOLOXのテンソル出力を、DetectionBufferが期待する辞書のリストに変換する"""
+        formatted = []
+        for out in outputs:
+            if out is None or len(out) == 0:
+                # 検出ゼロの場合
+                formatted.append({
+                    "boxes": torch.zeros((0, 4), device=self.device),
+                    "scores": torch.zeros((0,), device=self.device),
+                    "labels": torch.zeros((0,), dtype=torch.long, device=self.device)
+                })
+            elif isinstance(out, torch.Tensor):
+                # postprocess後の出力: [x1, y1, x2, y2, obj_conf, class_conf, class_id]
+                boxes = out[:, :4]
+                # スコアは objectness * class_confidence
+                scores = out[:, 4] * out[:, 5]
+                labels = out[:, 6].long()
+                
+                formatted.append({
+                    "boxes": boxes,
+                    "scores": scores,
+                    "labels": labels
+                })
+            else:
+                # すでに辞書型ならそのまま
+                formatted.append(out)
+        return formatted
 
     def _sanity_check(self, dry_run_steps=2):
         """学習開始前にForward/Loss計算が正しく動くか数ステップだけテストする"""
@@ -39,7 +100,6 @@ class Trainer:
                 if isinstance(data, dict):
                     data = {k: v.to(self.device, non_blocking=True) if isinstance(v, torch.Tensor) else v 
                             for k, v in data.items()}
-                    # AMPコンテキストでのテスト
                     with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.use_amp):
                         outputs, losses = self.model(**data)
                 else:
@@ -51,7 +111,6 @@ class Trainer:
             eval_model.eval()
             val_iter = iter(self.val_loader)
             
-            # 評価用バッファの初期化テスト
             mapcalc = DetectionBuffer(
                 height=self.val_loader.dataset.height, 
                 width=self.val_loader.dataset.width, 
@@ -64,15 +123,27 @@ class Trainer:
                     if isinstance(data, dict):
                         data = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
                                 for k, v in data.items()}
-                        # 評価時のAMPテスト
                         with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.use_amp):
                             outputs, _ = eval_model(**data, retrieve_detections=True)
                         
                         if outputs is not None:
+                            # 🌟 後処理 (NMSと座標変換)
+                            # YAMLの構造に合わせて config.model.head.num_classes 等に適宜変更してください
+                            pred_processed = postprocess(
+                                prediction=outputs,
+                                num_classes=self.config.model.head.num_classes, 
+                                conf_thre=self.config.model.postprocess.confidence_threshold,
+                                nms_thre=self.config.model.postprocess.nms_threshold
+                            )
+
+                            formatted_outputs = self._format_outputs_for_eval(pred_processed)
+                            
                             targets = data.get('targets')
+                            formatted_targets = self._format_targets_for_eval(targets)
+                            
                             mapcalc.update(
-                                outputs, 
-                                targets, 
+                                formatted_outputs,
+                                formatted_targets, 
                                 dataset=self.val_loader.dataset.dataset_name, 
                                 height=self.val_loader.dataset.height, 
                                 width=self.val_loader.dataset.width
@@ -80,13 +151,14 @@ class Trainer:
                     else:
                         raise ValueError("Trainer expects 'data' to be a dictionary.")
             
-            # 評価指標計算のテスト
             mapcalc.compute()
             print("✅ Evaluation forward pass & metrics compute: OK")
             print("============================================\n")
             
-            # キャッシュをクリアして本番に備える
-            torch.cuda.empty_cache()
+            if self.device.type == 'cuda':
+                torch.cuda.empty_cache()
+            elif self.device.type == 'mps':
+                torch.mps.empty_cache()
             
         except StopIteration:
             print("⚠️ データセットのサイズがdry_run_stepsより小さいため中断されましたが、問題ありません。")
@@ -112,14 +184,16 @@ class Trainer:
             with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.use_amp):
                 outputs, losses = self.model(**data)
 
-                if isinstance(losses, dict):
-                    total_loss = sum(loss for loss in losses.values())
-                    loss_logs = {f"train/{k}": v.item() for k, v in losses.items()}
-                elif isinstance(losses, torch.Tensor):
-                    total_loss = losses
-                    loss_logs = {"train/loss": total_loss.item()}
-                else:
-                    raise ValueError("Model must return 'losses' as a dict of Tensors or a single Tensor.")
+                # YOLOXの辞書からメインのロスを取得
+                total_loss = losses.get('loss', losses.get('total_loss'))
+                if total_loss is None:
+                    raise KeyError("Loss dictionary must contain 'loss' or 'total_loss' for backward pass.")
+
+                # WandB用ログの作成: 辞書の全要素をloopしてログ用に整形
+                loss_logs = {
+                    f"train/{k}": (v.item() if isinstance(v, torch.Tensor) else float(v)) 
+                    for k, v in losses.items()
+                }
 
             # --- 2. スケーリングされたLossで逆伝播 ---
             self.scaler.scale(total_loss).backward()
@@ -127,8 +201,8 @@ class Trainer:
             # --- 3. 勾配のスケールを戻す (Clippingや手動操作の前に必須) ---
             self.scaler.unscale_(self.optimizer)
 
-            if hasattr(self.args, 'clip'):
-                torch.nn.utils.clip_grad_value_(self.model.parameters(), self.args.clip)
+            if hasattr(self.config.training, 'clip'):
+                torch.nn.utils.clip_grad_value_(self.model.parameters(), self.config.training.clip)
             self._fix_gradients()
 
             # --- 4. OptimizerのステップとScalerの更新 ---
@@ -144,8 +218,10 @@ class Trainer:
             total_epoch_loss += total_loss.item()
             
             current_lr = self.optimizer.param_groups[0]['lr']
-            wandb.log({"train/step_total_loss": total_loss.item(), "train/lr": current_lr, **loss_logs})
-            pbar.set_postfix({'total_loss': total_loss.item(), 'lr': current_lr})
+            
+            # ログの記録（ステップ単位）
+            wandb.log({"train/lr": current_lr, **loss_logs})
+            pbar.set_postfix({'loss': total_loss.item(), 'lr': current_lr})
 
         return total_epoch_loss / len(self.train_loader)
 
@@ -168,15 +244,26 @@ class Trainer:
             else:
                 raise ValueError("Evaluation expects 'data' to be a dictionary.")
 
-            # --- 推論時もAMPを適用 ---
             with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.use_amp):
                 outputs, _ = eval_model(**data, retrieve_detections=True)
             
             if outputs is not None:
+                # 🌟 後処理 (NMSと座標変換)
+                pred_processed = postprocess(
+                    prediction=outputs,
+                    num_classes=self.config.model.head.num_classes, 
+                    conf_thre=self.config.model.postprocess.confidence_threshold,
+                    nms_thre=self.config.model.postprocess.nms_threshold
+                )
+                         
+                formatted_outputs = self._format_outputs_for_eval(pred_processed)
+                
                 targets = data.get('targets')
+                formatted_targets = self._format_targets_for_eval(targets) 
+                
                 mapcalc.update(
-                    outputs, 
-                    targets, 
+                    formatted_outputs, 
+                    formatted_targets, 
                     dataset=self.val_loader.dataset.dataset_name, 
                     height=self.val_loader.dataset.height, 
                     width=self.val_loader.dataset.width
@@ -193,12 +280,10 @@ class Trainer:
 
     def run(self):
         # 1. レジューム処理
-        resume_path = getattr(self.args, 'resume_checkpoint', None)
+        resume_path = getattr(self.config.training, 'resume_checkpoint', None)
         if resume_path:
-            # 明示的にパスが指定された場合
             self.start_epoch = self.checkpointer.restore_checkpoint(resume_path)
         else:
-            # 出力先ディレクトリから自動的にレジューム
             self.start_epoch = self.checkpointer.restore_if_existing(best=False)
 
         # 2. Sanity Check (学習開始前にテストを実行)
@@ -206,11 +291,13 @@ class Trainer:
 
         # 3. 学習・評価ループ
         print("=== 🚀 Starting Training Loop ===")
-        for epoch in range(self.start_epoch, self.args.tot_num_epochs):
+        tot_num_epochs = getattr(self.config.training, 'tot_num_epochs', 100)
+        eval_interval = getattr(self.config.training, 'eval_interval', 1)
+
+        for epoch in range(self.start_epoch, tot_num_epochs):
             train_loss = self.train_epoch(epoch)
             wandb.log({"train/epoch_loss": train_loss, "epoch": epoch})
             
-            eval_interval = getattr(self.args, 'eval_interval', 1)
             if epoch % eval_interval == 0:
                 metrics = self.evaluate(epoch)
                 
