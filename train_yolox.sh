@@ -25,7 +25,7 @@ elif [ "$MODE" = "scratch" ]; then
     # Scratch（最初から）用の推奨設定
     PRETRAINED_PATH="null"
     BATCH_SIZE=16           # Scratchはリソースを食う場合があるため調整
-    LR=0.01                # 最初からは高めのLRが一般的
+    LR=0.001                # 最初からは高めのLRが一般的
     EPOCHS=300             # Scratchは長く回す必要がある
     WARMUP=5               # ウォームアップも長めに
     EMA=0.9998
@@ -53,4 +53,4 @@ python3 train.py \
     training.ema_decay=${EMA} \
     training.num_workers=12 \
     training.use_amp=true \
-    training.clip=CLIP
+    training.clip=${CLIP} 
