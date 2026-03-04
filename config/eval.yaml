@@ -10,5 +10,6 @@ hydra:
 eval:
   batch_size: 4
   num_workers: 4
+  output_dir: ./outputs/eval/${now:%Y-%m-%d}/${now:%H-%M-%S}
     
 ckpt_path: /path/to/.pth

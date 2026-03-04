@@ -1,10 +1,11 @@
 import os
+import shutil 
 import torch
 import json
 from pathlib import Path
 from torch.utils.data import DataLoader
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from models.detection.yolox_extension.models.detector import YoloXDetector 
 from data.dsec.dsec_det_dataset import DSECDataset
@@ -88,10 +89,32 @@ def main(config: DictConfig):
         print(f" - {k}: {v:.4f}")
     print("="*40)
 
-    output_path = os.path.join(os.getcwd(), "eval_results.json")
-    with open(output_path, "w") as f:
+    # --- 保存処理の統合 ---
+    output_dir = config.eval.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 1. 評価結果の保存
+    results_path = os.path.join(output_dir, "eval_results.json")
+    with open(results_path, "w") as f:
         json.dump(metrics, f, indent=4)
-    print(f"✅ Results saved to {output_path}")
+    print(f"✅ Results saved to {results_path}")
+
+    # 2. Configの保存 (OmegaConfを使ってYAML形式で保存)
+    config_path = os.path.join(output_dir, "eval_config.yaml")
+    OmegaConf.save(config=config, f=config_path)
+    print(f"✅ Config saved to {config_path}")
+
+    # 3. 評価に使用した重みファイルのコピー
+    ckpt_dst_path = os.path.join(output_dir, os.path.basename(ckpt_path))
+    try:
+        shutil.copy2(ckpt_path, ckpt_dst_path)
+        print(f"✅ Checkpoint copied to {ckpt_dst_path}")
+    except Exception as e:
+        print(f"⚠️ Failed to copy checkpoint: {e}")
+
+    print("\n" + "="*40)
+    print(f"🎉 All evaluation artifacts are saved in:\n📁 {output_dir}")
+    print("="*40)
 
 if __name__ == "__main__":
     main()
