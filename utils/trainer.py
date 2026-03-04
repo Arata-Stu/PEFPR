@@ -169,6 +169,10 @@ class Trainer:
             if wandb.run is not None:
                 wandb.log({f"train/{k}": (v.item() if isinstance(v, torch.Tensor) else v) for k, v in losses.items()})
 
+                if self.scheduler is not None:
+                    current_lr = self.scheduler.get_last_lr()[-1]
+                    wandb.log({"train/lr": current_lr})
+
 
         return total_epoch_loss / len(self.train_loader)
 
