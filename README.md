@@ -13,7 +13,6 @@ pip3 install -r requirements.txt
 mkdir lib
 cd lib
 git clone https://github.com/facebookresearch/detectron2.git
-cd detectron2
 pip3 install -e detectron2 --no-build-isolation
 ```
 
