@@ -21,8 +21,8 @@ class Trainer:
         self.config = config
         self.start_epoch = 0
         
-        # AMP設定
-        self.use_amp = getattr(self.config.training, 'use_amp', True)
+        training_config = self.config.get('training', {})
+        self.use_amp = training_config.get('use_amp', True)
         self.scaler = torch.amp.GradScaler(device=self.device.type, enabled=self.use_amp)
         
     def _fix_gradients(self):

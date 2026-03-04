@@ -11,7 +11,6 @@ from data.dsec.dsec_det_dataset import DSECDataset
 from data.utils.augmentor import Augmentations
 from data.utils.collate import custom_collate_fn
 from utils.trainer import Trainer  
-from utils.helper import smart_load_state_dict
 
 @hydra.main(config_path='config', config_name='eval', version_base='1.2')
 def main(config: DictConfig):
@@ -46,9 +45,25 @@ def main(config: DictConfig):
     print("=== 🚀 Initializing Model & Loading Weights ===")
     model = YoloXDetector(config.model).to(device)
     
-    # テスト用の重みをロード (例: config.evaluation.ckpt_path)
     ckpt_path = config.ckpt_path
-    model = smart_load_state_dict(model, ckpt_path)
+    print(f"Loading checkpoint from {ckpt_path}")
+    
+    # 1. PyTorch 2.6対策をして標準ロード
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+
+    # 2. EMAの重みを最優先で抽出
+    if "ema" in checkpoint:
+        print("✅ EMA weights found. Loading EMA state_dict...")
+        state_dict = checkpoint["ema"]
+    elif "model" in checkpoint:
+        print("⚠️ EMA weights NOT found. Loading standard model state_dict...")
+        state_dict = checkpoint["model"]
+    else:
+        state_dict = checkpoint
+
+    # 3. 厳密なロード (strict=True) でキーの完全一致を保証
+    model.load_state_dict(state_dict, strict=True)
+    print("✅ Weights loaded successfully!")
 
     print("=== 🚀 Starting Evaluation ===")
     evaluator = Trainer(

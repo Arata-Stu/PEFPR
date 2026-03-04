@@ -44,3 +44,15 @@ training.num_workers=12 \
 wandb.project=yolox \
 wandb.name=yolox \
 ```
+
+### eval
+RGBだけ
+```bash
+python3 eval.py \
+dataset=dsec_det \
+model=yolox \
+dataset.dataset_root=/path/to/dataset/ \
+dataset.use_events=false \
+dataset.use_image=true \
+ckpt_path=/path/to/.pth
+```
