@@ -167,7 +167,8 @@ class Trainer:
             total_epoch_loss += total_loss.item()
             pbar.set_postfix({'loss': total_loss.item()})
             if wandb.run is not None:
-                wandb.log({f"train/loss": total_loss.item(), "epoch": epoch})
+                wandb.log({f"train/{k}": (v.item() if isinstance(v, torch.Tensor) else v) for k, v in losses.items()})
+
 
         return total_epoch_loss / len(self.train_loader)
 
@@ -185,6 +186,7 @@ class Trainer:
         metrics = mapcalc.compute()
         if wandb.run is not None:
             wandb.log({f"val/{k}": v for k, v in metrics.items()})
+        
         return metrics
 
     def run(self):
