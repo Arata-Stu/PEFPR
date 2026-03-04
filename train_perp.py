@@ -101,7 +101,8 @@ def main(config: DictConfig):
 
     print("=== 🚀 Initializing Model ===")
     model = YoloXPEPRDetector(config.model).to(device)
-    model = smart_load_state_dict(model, config.training.pretrained_path)
+    if config.training.pretrained_path is not None:
+        model = smart_load_state_dict(model, config.training.pretrained_path)
     count_parameters(model, model_name="YoloXPEPRDetector")
     ema = ModelEMA(model, decay=config.training.get("ema_decay", 0.9999))
 

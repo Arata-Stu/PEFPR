@@ -90,8 +90,8 @@ def main(config: DictConfig):
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")  # macOS (Apple Silicon) 用
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device("mps")  # macOS (Apple Silicon) 用
     else:
         device = torch.device("cpu")  
     
@@ -99,7 +99,8 @@ def main(config: DictConfig):
 
     print("=== 🚀 Initializing Model ===")
     model = YoloXDetector(config.model).to(device)
-    model = smart_load_state_dict(model, config.training.pretrained_path)
+    if config.training.pretrained_path is not None:
+        model = smart_load_state_dict(model, config.training.pretrained_path)
     count_parameters(model, model_name="YoloXDetector")
     ema = ModelEMA(model, decay=config.training.get("ema_decay", 0.9999))
 
