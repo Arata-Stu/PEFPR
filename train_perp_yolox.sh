@@ -38,7 +38,7 @@ fi
 # --- 4. 実行コマンド ---
 echo "Running in [${MODE}] mode with model [${MODEL_TYPE}]..."
 
-python3 train.py \
+python3 train_perp.py \
     model=${MODEL_TYPE} \
     wandb.project=${PROJECT_NAME} \
     wandb.name=${RUN_NAME} \
