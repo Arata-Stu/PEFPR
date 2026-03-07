@@ -5,15 +5,15 @@ MODE=${1:-"finetune"}
 shift $(( $# > 0 ? 1 : 0 ))
 
 # --- 2. プロジェクト共通設定 ---
-PROJECT_NAME="yolox-s"
+PROJECT_NAME="perp_yolox-s"
 DATASET_ROOT="/path/to/dsec"
-MODEL_TYPE="yolox"  
+MODEL_TYPE="perp_yolox"  
 MODEL_DEPTH=0.33
 MODEL_WIDTH=0.50
 
 # --- 3. 学習モード別プリセット設定 ---
 if [ "$MODE" = "finetune" ]; then
-    RUN_NAME="yolox-s-finetune"
+    RUN_NAME="perp_yolox-s-finetune"
     PRETRAINED_PATH="./weights/yolox/yolox_s.pth"
     BATCH_SIZE=16
     LR=0.0002
@@ -22,7 +22,7 @@ if [ "$MODE" = "finetune" ]; then
     EMA=0.9999
     CLIP=0.1
 elif [ "$MODE" = "scratch" ]; then
-    RUN_NAME="yolox-s-scratch"
+    RUN_NAME="perp_yolox-s-scratch"
     PRETRAINED_PATH="null"
     BATCH_SIZE=16
     LR=0.001
