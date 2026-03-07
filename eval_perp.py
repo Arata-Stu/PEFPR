@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from models.detection.yolox_extension.models.detector import YoloXDetector 
+from models.detection.yolox_extension.models.detector import YoloXPEPRDetector 
 from data.dsec.dsec_det_dataset import DSECDataset
 from data.utils.augmentor import Augmentations
 from data.utils.collate import custom_collate_fn
@@ -45,8 +45,8 @@ def main(config: DictConfig):
     print(f"=== 🚀 Using Device: {device} ===")
 
     print("=== 🚀 Initializing Model & Loading Weights ===")
-    model = YoloXDetector(config.model).to(device)
-    count_parameters(model, model_name="YoloXDetector")
+    model = YoloXPEPRDetector(config.model).to(device)
+    count_parameters(model, model_name="PERPYoloXDetector")
     
     ckpt_path = config.ckpt_path
     print(f"Loading checkpoint from {ckpt_path}")
